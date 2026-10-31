@@ -1,0 +1,389 @@
+
+// © 2026 FWGAMESYT | WhatsApp Bot
+// Config reads from .env (primary) → getVar runtime (secondary) → defaults
+//
+
+const fs   = require('fs');
+const path = require('path');
+const { getVar } = require('../src/Plugin/configManager');
+
+const parseBoolean = (value, fallback) => {
+    if (value === undefined || value === null || value === '') return fallback;
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    const normalized = String(value).trim().toLowerCase();
+    if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'off'].includes(normalized)) return false;
+    return fallback;
+};
+
+const getBoolean = (key, userValue, fallback) => {
+    const envValue = process.env[key];
+    if (envValue !== undefined) return parseBoolean(envValue, fallback);
+    const runtimeValue = getVar(key, undefined);
+    if (runtimeValue !== undefined && runtimeValue !== null) return parseBoolean(runtimeValue, fallback);
+    return parseBoolean(userValue, fallback);
+};
+
+// The deploy starter writes MODE=public|private (not PUBLIC_MODE), so the
+// value chosen at deploy time was silently ignored and the bot always ran with
+// the default. Both spellings are honoured here; PUBLIC_MODE still wins when
+// both are present. Env vars are read once, at startup, before runtime
+// overrides — later `.setvar` changes are never clobbered by the environment.
+// (@crysnovax—FIX22-09-26)
+const MODE_ENV = String(process.env.MODE || '').trim().toLowerCase();
+const modeToPublic = () => {
+    if (['public', 'group', 'all', 'everyone'].includes(MODE_ENV)) return true;
+    if (['private', 'self', 'selfbot', 'owner'].includes(MODE_ENV)) return false;
+    return undefined;
+};
+
+/*
+──────────────────────────────────────────
+Load User Config (optional JSON override)
+──────────────────────────────────────────
+*/
+const USER_CONFIG_PATH = path.join(__dirname, '../database/user-config.json');
+let userConfig = {};
+try {
+    if (fs.existsSync(USER_CONFIG_PATH)) {
+        userConfig = JSON.parse(fs.readFileSync(USER_CONFIG_PATH, 'utf8'));
+    }
+} catch {}
+
+/*
+──────────────────────────────────────────
+Auto-detect number from session creds
+Priority:
+  1. process.env (from .env file)
+  2. getVar() runtime override (setvar command)
+  3. user-config.json
+  4. sessions/creds.json  ← auto after pairing
+  5. Empty (fail closed; set OWNER_NUMBER explicitly)
+──────────────────────────────────────────
+*/
+const getSessionNumber = () => {
+    try {
+        const credsPath = path.join(__dirname, '../sessions/creds.json');
+        if (fs.existsSync(credsPath)) {
+            const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
+            const rawId = creds?.me?.id;
+            if (rawId) return rawId.split(':')[0].split('@')[0];
+        }
+    } catch {}
+    return null;
+};
+
+const defaultNumber = process.env.OWNER_NUMBER || '';
+
+const resolvedOwner =
+    process.env.OWNER_NUMBER        ||
+    getVar('OWNER_NUMBER')          ||
+    userConfig?.owner?.number       ||
+    getSessionNumber()              ||
+    defaultNumber;
+
+/*
+──────────────────────────────────────────
+Config (ZEE BOT structure + CRYSNOVA V2 fields)
+──────────────────────────────────────────
+*/
+const config = {
+
+    // ════════════════════════════════════════════
+    // BOT IDENTITY (ZEE BOT .env style)
+    // ════════════════════════════════════════════
+    owner: resolvedOwner,
+
+    botNumber:
+        process.env.BOT_NUMBER       ||
+        getVar('BOT_NUMBER')         ||
+        userConfig?.bot?.number      ||
+        getSessionNumber()           ||
+        defaultNumber,
+
+    session:
+        process.env.SESSION_NAME     ||
+        getVar('SESSION_NAME')       ||
+        userConfig?.session          ||
+        'sessions',
+
+    thumbUrl:
+        process.env.MENU_URL         ||
+        process.env.THUMB_URL        ||
+        getVar('MENU_URL')           ||
+        getVar('THUMB_URL')          ||
+        userConfig?.thumbUrl         ||
+    //    'https://cdn.crysnovax.link/files/1783469167623-6d58c43c-68b4-41ce-87ab-c0da1f615b28.mp4',
+       // 'https://cdn.crysnovax.link/files/1778529162616-eca99707-7b11-453a-802a-e85a9d1c2395.jpeg',
+       // 'https://cdn.crysnovax.link/files/1784725819117-db2035e8-f797-4f47-8d41-e1dd6f546553.mp4',
+        'https://cdn.crysnova.qzz.io/files/1787958372411-7ca6ed60-abb2-4cb6-9868-316adfdfaeb1.mp4',
+
+    // ════════════════════════════════════════════
+    // PANEL CONNECTOR API (FWGAMESYT)
+    // ════════════════════════════════════════════
+    panelApiPort:
+        process.env.PANEL_API_PORT   ||
+        getVar('PANEL_API_PORT')     ||
+        userConfig?.panelApiPort     ||
+        9000,
+
+    panelRoot:
+        process.env.PANEL_ROOT       ||
+        getVar('PANEL_ROOT')         ||
+        userConfig?.panelRoot        ||
+        process.cwd(),
+
+    // ════════════════════════════════════════════
+    // BOT STATUS / MODE (ZEE BOT .env style)
+    // ════════════════════════════════════════════
+    status: {
+        public: (() => {
+            if (process.env.PUBLIC_MODE !== undefined) return parseBoolean(process.env.PUBLIC_MODE, true);
+            const mapped = modeToPublic();
+            if (mapped !== undefined) return mapped;
+            return getBoolean('PUBLIC_MODE', userConfig?.bot?.public, true);
+        })(),
+        terminal: getBoolean('TERMINAL_MODE', userConfig?.bot?.terminal, true),
+        reactsw:  getBoolean('REACT_STATUS', userConfig?.bot?.reactsw, true)
+    },
+
+    // ════════════════════════════════════════════
+    // BOT MODE FLAGS (ZEE BOT specific)
+    // ════════════════════════════════════════════
+    mode: {
+        autoRead:      getBoolean('AUTO_READ', userConfig?.bot?.autoRead, false),
+        autoTyping:    getBoolean('AUTO_TYPING', userConfig?.bot?.autoTyping, false),
+        autoRecording: getBoolean('AUTO_RECORDING', userConfig?.bot?.autoRecording, false),
+        alwaysOnline:  getBoolean('ALWAYS_ONLINE', userConfig?.bot?.alwaysOnline, true),
+        selfBot:       getBoolean('SELF_BOT', userConfig?.bot?.selfBot, ['self', 'selfbot'].includes(MODE_ENV))
+    },
+
+    // ════════════════════════════════════════════
+    // SETTINGS (CRYSNOVA V2 style with .env)
+    // ════════════════════════════════════════════
+    settings: {
+        title:
+            process.env.BOT_NAME         ||
+            getVar('BOT_NAME')           ||
+            userConfig?.bot?.name        ||
+            'FWGAMESYT MD',
+
+        packname:
+            process.env.BOT_NAME         ||
+            getVar('BOT_NAME')           ||
+            userConfig?.bot?.name        ||
+            'FWGAMESYT MD',
+
+        prefix: (() => {
+            // Runtime (`.setvar PREFIX`) wins so an in-bot change is never
+            // re-overridden by the environment; then `.env`/deploy value, then
+            // the stored user config. (@crysnovax—FIX22-09-26)
+            const runtimePrefix = getVar('PREFIX');
+            if (runtimePrefix !== undefined && runtimePrefix !== null) {
+                return (runtimePrefix === 'null' || runtimePrefix === '') ? '' : runtimePrefix;
+            }
+
+            const envPrefix = process.env.PREFIX;
+            if (envPrefix !== undefined) {
+                return (envPrefix === 'null' || envPrefix === '') ? '' : envPrefix;
+            }
+
+            const userPrefix = userConfig?.bot?.prefix;
+            if (userPrefix !== undefined && userPrefix !== null) {
+                return (userPrefix === 'null' || userPrefix === '') ? '' : userPrefix;
+            }
+
+            return '.';
+        })(),
+
+        description: 'FWGAMESYT WhatsApp Bot',
+        author:      'https://github.com/crysnovax/CRYSNOVA_AI',
+        footer:      '© FWGAMESYT',
+
+        ownerJid:
+            getVar('OWNER_JID')          ||
+            userConfig?.owner?.jid       ||
+            (resolvedOwner ? `${resolvedOwner}@s.whatsapp.net` : null),
+
+        ownerName:
+            process.env.OWNER_NAME       ||
+            getVar('OWNER_NAME')         ||
+            userConfig?.owner?.name      ||
+            'ZEE OWNER'
+    },
+
+    // ════════════════════════════════════════════
+    // PERMISSIONS (ZEE BOT .env style)
+    // ════════════════════════════════════════════
+    permissions: {
+        owners: process.env.OWNER_NUMBERS
+            ? process.env.OWNER_NUMBERS.split(',').map(n => n.trim() + '@s.whatsapp.net')
+            : (resolvedOwner ? [`${resolvedOwner}@s.whatsapp.net`] : []),
+        premium: [],
+        banned: []
+    },
+
+    // ════════════════════════════════════════════
+    // MESSAGES (CRYSNOVA V2 style)
+    // ════════════════════════════════════════════
+    message: {
+        owner:   '`ⓘ OWNER ONLY 彡`',
+        group:   '`⟁⃝GROUP ONLY!℘`',
+        admin:   '`⚠︎ ADMIN ONLY! 𓃼`',
+        private: 'ಠ_ಠ_*USE THIS IN DM*_ 𓀀'
+    },
+
+    mess: {
+        owner: '`☠︎︎ OWNER ONLY!`',
+        done:  '`㋛ Mode changed!!`',
+        error: 'Something went wrong! ✘',
+        wait:  '_Please wait... ⚉_'
+    },
+
+    // ════════════════════════════════════════════
+    // AUTO REPLY (ZEE BOT feature)
+    // ════════════════════════════════════════════
+    autoReply: {
+        enabled: process.env.AUTO_REPLY !== 'false',
+        ai: {
+            enabled:   true,
+            apiUrl:    process.env.AI_API_URL   || 'https://all-in-1-ais.officialhectormanuel.workers.dev/',
+            model:     process.env.AI_MODEL     || 'gpt-4.5-preview',
+            maxMemory: 10
+        },
+        greetings: {
+            enabled:  true,
+            keywords: ['hi', 'hello', 'hey', 'morning', 'afternoon', 'evening'],
+            response: 'Hello! 👋 How can ZEE BOT help you today?'
+        }
+    },
+
+    // ════════════════════════════════════════════
+    // NEWSLETTER (CRYSNOVA V2 style)
+    // ════════════════════════════════════════════
+    newsletter: {
+        name:
+            process.env.BOT_NAME ||
+            getVar('BOT_NAME')   ||
+            'FWGAMESYT MD',
+        id: '120363402922206865@newsletter'
+    },
+
+    // ════════════════════════════════════════════
+    // API KEYS (ZEE BOT .env style)
+    // ════════════════════════════════════════════
+    api: {
+        baron0:
+            process.env.BARON0_API_KEY ||
+            getVar('BARON0_API_KEY') ||
+            'bk_v1_PSuvIYJsAM8Z7FG3_iBVObDwyP3O4aGuqbj6JfydQ0g0m_f6sSNseCtz8CCQN8MSrmd5Xy-yGCQ3QGOxD7OsfE3iN5P2KF1rVU2aXjHNAJs7b6dXTeOFVQq-CAuWCcKcYtIvUhSaWUqp6rC6P12-x8nurvtZCumGOZnFuy3bk_v1_PSuvIYJsAM8Z7FG3_iBVObDwyP3O4aGuqbj6JfydQ0g0m_f6sSNseCtz8CCQN8MSrmd5Xy-yGCQ3QGOxD7OsfE3iN5P2KF1rVU2aXjHNAJs7b6dXTeOFVQq-CAuWCcKcYtIvUhSaWUqp6rC6P12-x8nurvtZCumGOZnFuy3meWgRek0jBlQmWTPF1-P7IAF9Wht1IX7akAiVQZxSK2gGJdecJWEuJwVKVJVED3aNbksdAP0WPsuAMyR6QMQ9sUNMrEIiCz--bXYdtILtXFsjjjQG2a9AbUSsZybOzG3RmUG9ohLS9mWEKzEYl6qas0uzKJ1bN3-7cM6sSjtTLJQnDF7HyfsUFVZVR8_m_0t4dxf1UmgO9G0OyynwITwLMaKt_jtTCVWry5mGgSFhgH_Oz_Wa0moCdY9zwlJOyEx-6G0F2aM1BoesbWzxcgqWsljfg9Y1quwUfpxw9Iq62hBx4OGxsP_bFtHLtvgatJUqL-IMPqbQBh9kSRVhk29XAQXPCUSfliF-hmLPKAO5DQDfVsLbtbklKX--UdsD',
+        baseurl:
+            process.env.API_BASEURL  ||
+            getVar('API_BASEURL')    ||
+            'https://hector-api.vercel.app/',
+        apikey:
+            process.env.API_KEY      ||
+            getVar('API_KEY')        ||
+            'hector',
+        groq:
+            process.env.GROQ_API_KEY ||
+            getVar('GROQ_API_KEY')   ||
+            '',
+        openai:
+            process.env.OPENAI_API_KEY  ||
+            getVar('OPENAI_API_KEY')    ||
+            '',
+        weather:
+            process.env.WEATHER_API_KEY ||
+            getVar('WEATHER_API_KEY')   ||
+            'e6926030169752d7e0d85377e489c415',
+        
+        gateway:
+            process.env.GATEWAY_URL     ||
+            getVar('GATEWAY_URL')       ||
+            'https://api.crysnovax.link',
+        gatewayToken:
+            process.env.GATEWAY_TOKEN   ||
+            getVar('GATEWAY_TOKEN')     ||
+            'x',
+
+        cdn:
+            process.env.CDN_URL         ||
+            getVar('CDN_URL')           ||
+            'https://cdn.crysnovax.link',
+        imageBase:
+            process.env.IMAGE_API_BASE  ||
+            getVar('IMAGE_API_BASE')    ||
+            'https://apis.prexzyvilla.site/ai',
+        removebg:
+            process.env.REMOVE_BG_API_KEY ||
+            getVar('REMOVE_BG_API_KEY')   ||
+            'fy5Va5Qivw2BUQoojeSzzcHp'
+    },
+
+    // ════════════════════════════════════════════
+    // STICKER (CRYSNOVA V2 style)
+    // ════════════════════════════════════════════
+    sticker: {
+        packname:
+            process.env.BOT_NAME         ||
+            getVar('BOT_NAME')           ||
+            'FWGAMESYT MD',
+        author:
+            process.env.STICKER_AUTHOR   ||
+            getVar('STICKER_AUTHOR')     ||
+            'crysnovax'
+    },
+
+    // ════════════════════════════════════════════
+    // BRANDING (ZEE BOT style)
+    // ════════════════════════════════════════════
+    branding: {
+        footer:  '© ZEE BOT | Powered by CRYSNOVA AI',
+        channel: 'https://whatsapp.com/channel/0029Vb6pe77K0IBn48HLKb38',
+        group:   process.env.GROUP_LINK || 'https://chat.whatsapp.com/Besbj8VIle1GwxKKZv1lax?mode=gi_t',
+        repo:    'https://github.com/crysnovax/CRYSNOVA_AI'
+    },
+
+    // ════════════════════════════════════════════
+    // LOGGING (ZEE BOT style)
+    // ════════════════════════════════════════════
+    logging: {
+        level:       process.env.LOG_LEVEL || 'silent',
+        logCommands: true,
+        logMessages: false
+    },
+
+    // ════════════════════════════════════════════
+    // STATUS HANDLER SETTINGS (CRYSNOVA V2)
+    // ════════════════════════════════════════════
+    statusHandler: {
+        autoView:
+            process.env.AUTO_STATUS_VIEW !== undefined
+                ? process.env.AUTO_STATUS_VIEW !== 'false'
+                : (getVar('AUTO_STATUS_VIEW') ?? true),
+
+        autoLike:
+            process.env.AUTO_STATUS_LIKE !== undefined
+                ? process.env.AUTO_STATUS_LIKE !== 'false'
+                : (getVar('AUTO_STATUS_LIKE') ?? true),
+
+        statusEmoji:
+            process.env.STATUS_EMOJI     ||
+            getVar('STATUS_EMOJI')       ||
+            '❤️‍🔥',
+
+        ghostMode:
+            process.env.GHOST_MODE !== undefined
+                ? process.env.GHOST_MODE !== 'false'
+                : (getVar('GHOST_MODE') ?? false)
+    }
+};
+
+// Older commands read these top-level names; keep them aligned with the
+// canonical settings populated from BOT_NAME and OWNER_NAME.
+config.botname = config.settings.title;
+config.ownerName = config.settings.ownerName;
+
+module.exports = config;

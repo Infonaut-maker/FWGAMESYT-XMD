@@ -1,0 +1,3 @@
+const { request, pickText, encodeParams } = require('../../Plugin/prexzy');
+const states=new Map();
+module.exports={name:'gema',alias:['gem','gemi'],category:'AI',desc:'Gemini chat with memory',execute:async(sock,m,{args,reply})=>{const prompt=args.join(' ').trim();if(!prompt)return reply('Usage: .gema <message>');try{const r=await request('/ai/gemini',encodeParams({prompt,session_id:states.get(m.chat)}));const text=pickText(r.data);if(r.data?.session_id)states.set(m.chat,r.data.session_id);if(!text)throw Error(`HTTP ${r.status}`);return sock.sendMessage(m.chat,{text:`✦ *GEMA AI*\n\n${text}`},{quoted:m});}catch(e){console.error('[GEMA]',e.message);return reply('✘ Gema is temporarily unavailable.');}}};

@@ -1,0 +1,110 @@
+{
+  "missions": {
+    "PLOGME-MVW25NX6-ED65ED": {
+      "id": "PLOGME-MVW25NX6-ED65ED",
+      "chat": "",
+      "owner": "",
+      "objective": "test rollback",
+      "status": "running",
+      "step": 1,
+      "plan": [
+        "edit",
+        "verify"
+      ],
+      "files": [],
+      "tests": [],
+      "errors": [],
+      "snapshots": [
+        {
+          "id": "PLOGME-MVW25NX6-ED65ED-mvw25nx7",
+          "dir": "/mnt/data/fw_work/CODY-main/database/plogme_snapshots/PLOGME-MVW25NX6-ED65ED-mvw25nx7",
+          "files": [
+            "database/plogme-agent-test.txt"
+          ],
+          "at": "2026-10-31T07:06:43.675Z"
+        }
+      ],
+      "events": [
+        {
+          "at": "2026-10-31T07:06:43.674Z",
+          "type": "created",
+          "message": "Mission created"
+        },
+        {
+          "at": "2026-10-31T07:06:43.675Z",
+          "type": "progress",
+          "message": "Editing test file",
+          "step": 1
+        },
+        {
+          "at": "2026-10-31T07:06:43.676Z",
+          "type": "rollback",
+          "message": "Restored snapshot PLOGME-MVW25NX6-ED65ED-mvw25nx7"
+        }
+      ],
+      "createdAt": "2026-10-31T07:06:43.674Z",
+      "updatedAt": "2026-10-31T07:06:43.676Z"
+    },
+    "PLOGME-MVW26BPA-C19015": {
+      "id": "PLOGME-MVW26BPA-C19015",
+      "chat": "12345@s.whatsapp.net",
+      "owner": "",
+      "objective": "verify agent tools",
+      "status": "planning",
+      "step": 0,
+      "plan": [
+        "inspect",
+        "test"
+      ],
+      "files": [],
+      "tests": [],
+      "errors": [],
+      "snapshots": [],
+      "events": [
+        {
+          "at": "2026-10-31T07:07:14.494Z",
+          "type": "created",
+          "message": "Mission created"
+        }
+      ],
+      "createdAt": "2026-10-31T07:07:14.494Z",
+      "updatedAt": "2026-10-31T07:07:14.494Z"
+    },
+    "PLOGME-MVW26BPA-530805": {
+      "id": "PLOGME-MVW26BPA-530805",
+      "chat": "12345@s.whatsapp.net",
+      "owner": "",
+      "objective": "health",
+      "status": "running",
+      "step": 0,
+      "plan": [
+        "inspect workspace and dependencies",
+        "execute health",
+        "verify result and report"
+      ],
+      "files": [],
+      "tests": [],
+      "errors": [],
+      "snapshots": [],
+      "events": [
+        {
+          "at": "2026-10-31T07:07:14.494Z",
+          "type": "created",
+          "message": "Mission created"
+        },
+        {
+          "at": "2026-10-31T07:07:14.497Z",
+          "type": "progress",
+          "message": "starting health…"
+        },
+        {
+          "at": "2026-10-31T07:07:14.497Z",
+          "type": "progress",
+          "message": "running runtime, database, dependency, and critical-file health checks…"
+        }
+      ],
+      "createdAt": "2026-10-31T07:07:14.494Z",
+      "updatedAt": "2026-10-31T07:07:14.497Z"
+    }
+  }
+}

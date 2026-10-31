@@ -1,0 +1,2 @@
+const { request } = require('../../Plugin/prexzy');
+module.exports={name:'loli',alias:['lolirandom'],category:'Anime',desc:'Send a random image',execute:async(sock,m,{reply})=>{try{const r=await request('/random/cat',{}, {responseType:'arraybuffer',timeout:90000});if(r.status!==200)throw Error('HTTP '+r.status);return sock.sendMessage(m.chat,{image:Buffer.from(r.data),caption:'🎲 Random image'},{quoted:m});}catch(e){console.error('[LOLI]',e.message);return reply('✘ Image service unavailable.');}}};
